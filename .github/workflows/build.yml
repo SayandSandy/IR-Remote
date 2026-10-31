@@ -2,7 +2,11 @@ name: Build APK
 
 on:
   push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -17,7 +21,32 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk AC-Remote.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: AC-Remote-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: AC-Remote.apk
+
+      # Publish as a GitHub Release so the phone can download it directly
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" AC-Remote.apk \
+            --title "AC Remote (build ${{ github.run_number }})" \
+            --notes "Download AC-Remote.apk on your phone and tap it to install." \
+            --latest
+
+      # Keep a copy of the latest APK on the 'apk' branch
+      - name: Save APK to apk branch
+        run: |
+          mkdir /tmp/out && cp AC-Remote.apk /tmp/out/
+          cd /tmp/out
+          git init -q -b apk
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add AC-Remote.apk
+          git commit -q -m "APK from build ${{ github.run_number }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk
