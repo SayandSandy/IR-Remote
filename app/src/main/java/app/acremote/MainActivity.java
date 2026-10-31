@@ -43,6 +43,19 @@ public class MainActivity extends Activity {
     private Ui.PowerKey powerKey;
     private Ui.Key kLed, kFan, kSleep, kTurbo, kSwingH, kSwingV, kClock, kTimer, kHr, kMin;
 
+    private Ui.PressButton finderLink;
+
+    // Button Finder sheet
+    private static final String[] FEATURES = {"LED DISPLAY", "TURBO", "SLEEP", "AUTO CLEAN"};
+    private View scrim;
+    private LinearLayout sheet;
+    private boolean sheetOpen;
+    private int finderFeature = 0;
+    private boolean[] flipped = new boolean[IrCodes.FINDER_BITS.length];
+    private final java.util.List<Ui.Key> testKeys = new java.util.ArrayList<>();
+    private final java.util.List<Ui.Key> useKeys = new java.util.ArrayList<>();
+    private TextView finderStatus, finderAssigned;
+
     private int setMode = SET_NONE;
     private int draftMins;          // timer length or clock minutes-of-day being edited
 
@@ -67,7 +80,10 @@ public class MainActivity extends Activity {
         }
         w.getDecorView().setSystemUiVisibility(flags);
 
-        setContentView(buildUi());
+        FrameLayout root = new FrameLayout(this);
+        root.addView(buildUi(), new FrameLayout.LayoutParams(-1, -1));
+        buildFinder(root);
+        setContentView(root);
         renderAll(false);
     }
 
@@ -133,7 +149,16 @@ public class MainActivity extends Activity {
         col.addView(seg, segLp);
         TextView segHint = Ui.text(this, "If your AC doesn't beep, try the next type.", 13, pal.secondary, false);
         segHint.setGravity(Gravity.CENTER);
-        col.addView(segHint, lp(-1, -2, 0, dp(2), 0, dp(12)));
+        col.addView(segHint, lp(-1, -2, 0, dp(2), 0, dp(4)));
+
+        finderLink = new Ui.PressButton(this);
+        TextView fl = Ui.text(this, "LED, Turbo or Sleep not working?  Open Button Finder ›", 14, pal.accent, true);
+        fl.setGravity(Gravity.CENTER);
+        fl.setPadding(0, dp(8), 0, dp(8));
+        finderLink.addView(fl, new FrameLayout.LayoutParams(-1, -2));
+        finderLink.setContentDescription("Open Button Finder");
+        finderLink.onTap(this::openFinder);
+        col.addView(finderLink, lp(-1, -2, 0, 0, 0, dp(8)));
 
         // ---- LCD card
         col.addView(buildLcd(), lp(-1, -2, 0, 0, 0, dp(10)));
@@ -463,6 +488,7 @@ public class MainActivity extends Activity {
     private void renderAll(boolean animate) {
         boolean on = s.power;
         powerKey.setOn(on);
+        finderLink.setVisibility(s.type == 1 ? View.GONE : View.VISIBLE);
 
         String[] glyph = {"A", "❄︎", "◌", "✲", "☀︎"};
         modeText.setText(glyph[s.mode] + "  " + AcState.MODE_NAMES[s.mode]);
@@ -554,6 +580,224 @@ public class MainActivity extends Activity {
         if (m < 60) return m + " min";
         if (m % 60 == 0) return (m / 60) + " h";
         return (m / 60) + " h " + (m % 60) + " min";
+    }
+
+    // ================================================================= Button Finder
+
+    private void buildFinder(FrameLayout root) {
+        scrim = new View(this);
+        scrim.setBackgroundColor(0x80000000);
+        scrim.setAlpha(0f);
+        scrim.setVisibility(View.GONE);
+        scrim.setOnClickListener(v -> closeFinder());
+        root.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+
+        sheet = new LinearLayout(this);
+        sheet.setOrientation(LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(pal.dark ? 0xFF1C1C1E : 0xFFF2F2F7);
+        float r = dp(24);
+        bg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+        sheet.setBackground(bg);
+        sheet.setPadding(dp(16), dp(8), dp(16), dp(16));
+        sheet.setClickable(true); // don't let taps fall through to the scrim
+        sheet.setVisibility(View.GONE);
+        int h = Math.round(getResources().getDisplayMetrics().heightPixels * 0.88f);
+        FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(-1, h);
+        slp.gravity = Gravity.BOTTOM;
+        root.addView(sheet, slp);
+
+        View grabber = new View(this);
+        grabber.setBackground(Ui.rounded(pal.secondary, dp(3)));
+        LinearLayout.LayoutParams gl = new LinearLayout.LayoutParams(dp(36), dp(5));
+        gl.gravity = Gravity.CENTER_HORIZONTAL;
+        gl.bottomMargin = dp(10);
+        sheet.addView(grabber, gl);
+
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = Ui.text(this, "Button Finder", 22, pal.label, false);
+        title.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        Ui.PressButton done = new Ui.PressButton(this);
+        TextView dt = Ui.text(this, "Done", 17, pal.accent, true);
+        dt.setPadding(dp(12), dp(8), 0, dp(8));
+        done.addView(dt);
+        done.setContentDescription("Done");
+        done.onTap(this::closeFinder);
+        head.addView(done);
+        sheet.addView(head);
+
+        TextView how = Ui.text(this,
+                "1. Turn the AC on with this app first.\n"
+                + "2. Pick the button you're fixing.\n"
+                + "3. Tap Test 1 and watch the AC. Tap it again to undo, then try the next test.\n"
+                + "4. When the AC does the right thing, tap Use on that row.",
+                14, pal.secondary, false);
+        how.setLineSpacing(0, 1.25f);
+        sheet.addView(how, lp(-1, -2, 0, dp(8), 0, dp(12)));
+
+        Ui.Segmented featSeg = new Ui.Segmented(this, pal, new String[]{"LED", "Turbo", "Sleep", "Clean"});
+        featSeg.setListener(idx -> { finderFeature = idx; resetFlips(); renderFinder(); });
+        LinearLayout.LayoutParams fsl = new LinearLayout.LayoutParams(-1, dp(36));
+        sheet.addView(featSeg, fsl);
+
+        LinearLayout assignedRow = new LinearLayout(this);
+        assignedRow.setGravity(Gravity.CENTER_VERTICAL);
+        finderAssigned = Ui.text(this, "", 14, pal.label, true);
+        assignedRow.addView(finderAssigned, new LinearLayout.LayoutParams(0, -2, 1));
+        Ui.PressButton reset = new Ui.PressButton(this);
+        TextView rt = Ui.text(this, "Reset", 14, pal.accent, true);
+        rt.setPadding(dp(12), dp(8), 0, dp(8));
+        reset.addView(rt);
+        reset.setContentDescription("Reset to standard");
+        reset.onTap(() -> { assign(-1); });
+        assignedRow.addView(reset);
+        sheet.addView(assignedRow, lp(-1, -2, 0, dp(10), 0, 0));
+
+        finderStatus = Ui.text(this, "", 13, pal.secondary, false);
+        finderStatus.setMinHeight(dp(20));
+        sheet.addView(finderStatus, lp(-1, -2, 0, dp(2), 0, dp(8)));
+
+        ScrollView list = new ScrollView(this);
+        LinearLayout rows = new LinearLayout(this);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        list.addView(rows, new FrameLayout.LayoutParams(-1, -2));
+        for (int i = 0; i < IrCodes.FINDER_BITS.length; i++) {
+            final int idx = i;
+            LinearLayout row = new LinearLayout(this);
+            Ui.Key test = new Ui.Key(this, pal, "Test " + (i + 1));
+            test.onTap(() -> runTest(idx));
+            Ui.Key use = new Ui.Key(this, pal, "Use");
+            use.onTap(() -> assign(idx));
+            row.addView(test, new LinearLayout.LayoutParams(0, dp(48), 1));
+            LinearLayout.LayoutParams ul = new LinearLayout.LayoutParams(dp(84), dp(48));
+            ul.leftMargin = dp(8);
+            row.addView(use, ul);
+            LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+            rl.bottomMargin = dp(8);
+            rows.addView(row, rl);
+            testKeys.add(test);
+            useKeys.add(use);
+        }
+        sheet.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
+    }
+
+    private int featureBit() {
+        switch (finderFeature) {
+            case 1: return s.turboBit;
+            case 2: return s.sleepBit;
+            case 3: return s.cleanBit;
+            default: return s.ledBit;
+        }
+    }
+
+    private void runTest(int i) {
+        if (!s.power) {
+            finderStatus.setText("Turn the AC on first: close this, press Power, then come back.");
+            finderStatus.setTextColor(pal.red);
+            return;
+        }
+        boolean wasOn = flipped[i];
+        resetFlipsExcept(i);
+        flipped[i] = !wasOn;
+        transmit(IrCodes.finderPattern(s, flipped[i] ? IrCodes.FINDER_BITS[i] : -1));
+        finderStatus.setTextColor(pal.secondary);
+        finderStatus.setText(flipped[i]
+                ? "Sent Test " + (i + 1) + ". Did " + FEATURES[finderFeature] + " change? If yes, tap Use."
+                : "Undid Test " + (i + 1) + ". Try the next one.");
+        renderFinder();
+    }
+
+    private void assign(int i) {
+        int bit = i < 0 ? -1 : IrCodes.FINDER_BITS[i];
+        boolean activeNow = i >= 0 && flipped[i];
+        switch (finderFeature) {
+            case 1: s.turboBit = bit; s.turbo = activeNow; break;
+            case 2: s.sleepBit = bit; s.sleep = activeNow; break;
+            case 3: s.cleanBit = bit; break;
+            default: s.ledBit = bit; s.light = !activeNow; break;
+        }
+        resetFlips();
+        s.save(prefs);
+        finderStatus.setTextColor(pal.secondary);
+        finderStatus.setText(i < 0
+                ? FEATURES[finderFeature] + " is back to the standard setting."
+                : FEATURES[finderFeature] + " now uses Test " + (i + 1) + ". Close this and try the button.");
+        lcdContent.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        renderFinder();
+        renderAll(false);
+    }
+
+    private void resetFlips() { java.util.Arrays.fill(flipped, false); }
+
+    private void resetFlipsExcept(int keep) {
+        for (int i = 0; i < flipped.length; i++) if (i != keep) flipped[i] = false;
+    }
+
+    private void renderFinder() {
+        int bit = featureBit();
+        int assignedIdx = -1;
+        for (int i = 0; i < IrCodes.FINDER_BITS.length; i++) {
+            if (IrCodes.FINDER_BITS[i] == bit) assignedIdx = i;
+            testKeys.get(i).setActive(flipped[i]);
+            testKeys.get(i).label.setText("Test " + (i + 1) + (flipped[i] ? "  ·  sent" : ""));
+        }
+        for (int i = 0; i < useKeys.size(); i++) {
+            boolean a = i == assignedIdx;
+            useKeys.get(i).setActive(a);
+            useKeys.get(i).label.setText(a ? "✓ Used" : "Use");
+        }
+        finderAssigned.setText(FEATURES[finderFeature] + ": "
+                + (assignedIdx < 0 ? "standard setting" : "Test " + (assignedIdx + 1)));
+    }
+
+    private void openFinder() {
+        if (sheetOpen) return;
+        sheetOpen = true;
+        exitSetMode();
+        resetFlips();
+        finderStatus.setText("");
+        renderFinder();
+        scrim.setVisibility(View.VISIBLE);
+        sheet.setVisibility(View.VISIBLE);
+        float h = sheet.getLayoutParams().height;
+        if (sheet.getTranslationY() == 0f) sheet.setTranslationY(h);
+        if (Ui.motionEnabled()) {
+            scrim.animate().alpha(1f).setDuration(Ui.Spring.duration(0.3f)).setInterpolator(Ui.SPRING).start();
+            sheet.animate().translationY(0).setDuration(Ui.Spring.duration(0.35f))
+                    .setInterpolator(Ui.SPRING).start();
+        } else {
+            scrim.setAlpha(1f);
+            sheet.setTranslationY(0);
+        }
+    }
+
+    private void closeFinder() {
+        if (!sheetOpen) return;
+        sheetOpen = false;
+        // If a test was left "sent", put the AC back to the normal state.
+        boolean anyFlipped = false;
+        for (boolean f : flipped) anyFlipped |= f;
+        if (anyFlipped && s.power) send(IrCodes.Cmd.STATE);
+        resetFlips();
+        float h = sheet.getLayoutParams().height;
+        if (Ui.motionEnabled()) {
+            scrim.animate().alpha(0f).setDuration(Ui.Spring.duration(0.3f)).setInterpolator(Ui.SPRING)
+                    .withEndAction(() -> { if (!sheetOpen) scrim.setVisibility(View.GONE); }).start();
+            sheet.animate().translationY(h).setDuration(Ui.Spring.duration(0.35f)).setInterpolator(Ui.SPRING)
+                    .withEndAction(() -> { if (!sheetOpen) sheet.setVisibility(View.GONE); }).start();
+        } else {
+            scrim.setAlpha(0f);
+            scrim.setVisibility(View.GONE);
+            sheet.setVisibility(View.GONE);
+        }
+        renderAll(false);
+    }
+
+    @Override public void onBackPressed() {
+        if (sheetOpen) closeFinder();
+        else super.onBackPressed();
     }
 
     // ================================================================= motion & feedback

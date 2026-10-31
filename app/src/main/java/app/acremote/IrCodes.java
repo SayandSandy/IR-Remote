@@ -40,7 +40,27 @@ public final class IrCodes {
     private static final int TCL_HDR_MARK = 3000, TCL_HDR_SPACE = 1650;
     private static final int TCL_BIT_MARK = 500, TCL_ONE = 1050, TCL_ZERO = 325;
 
+    /** Candidate bit positions (byte*8 + bit) for the Button Finder, most likely first. */
+    static final int[] FINDER_BITS = {
+            12 * 8 + 4,  // seen set in the Videocon entry of the IRext database
+            5 * 8 + 0, 5 * 8 + 1, 5 * 8 + 7, 6 * 8 + 4, 6 * 8 + 6, 6 * 8 + 7, 8 * 8 + 7,
+            12 * 8 + 6, 12 * 8 + 0, 12 * 8 + 1, 12 * 8 + 2, 12 * 8 + 5, 5 * 8 + 5, 8 * 8 + 6,
+            4 * 8 + 0, 4 * 8 + 1, 4 * 8 + 2, 4 * 8 + 3, 4 * 8 + 4, 4 * 8 + 5, 4 * 8 + 6, 4 * 8 + 7,
+            11 * 8 + 0, 11 * 8 + 1, 11 * 8 + 2, 11 * 8 + 3, 11 * 8 + 4, 11 * 8 + 5, 11 * 8 + 6, 11 * 8 + 7,
+            7 * 8 + 4, 7 * 8 + 5, 7 * 8 + 6, 7 * 8 + 7,
+            9 * 8 + 0, 9 * 8 + 7, 10 * 8 + 0, 10 * 8 + 7,
+            5 * 8 + 6, 6 * 8 + 5   // the standard TCL light / turbo positions
+    };
+
     static byte[] tclBytes(AcState s, boolean isTcl, boolean timerPress) {
+        return tclBytes(s, isTcl, timerPress, false, -1);
+    }
+
+    /**
+     * @param cleanPulse  include the Auto Clean bit (one-shot) if one has been assigned
+     * @param flipBit     Button Finder: invert this bit (byte*8+bit), or -1
+     */
+    static byte[] tclBytes(AcState s, boolean isTcl, boolean timerPress, boolean cleanPulse, int flipBit) {
         int[] b = new int[14];
         b[0] = 0x23; b[1] = 0xCB; b[2] = 0x26; b[3] = 0x01; b[4] = 0x00;
 
@@ -52,12 +72,14 @@ public final class IrCodes {
             if (s.power) offTimer = units; else onTimer = units;
         }
 
-        // Byte 5: power, timers, light (bit set = light OFF)
+        boolean ledCustom = s.ledBit >= 0, turboCustom = s.turboBit >= 0, sleepCustom = s.sleepBit >= 0;
+
+        // Byte 5: power, timers, light (standard TCL: bit set = light OFF)
         b[5] = 0x20;
         if (s.power) b[5] |= 1 << 2;
         if (offTimer > 0) b[5] |= 1 << 3;
         if (onTimer > 0) b[5] |= 1 << 4;
-        if (!s.light) b[5] |= 1 << 6;
+        if (!s.light && !ledCustom) b[5] |= 1 << 6;
 
         // Byte 6: mode + turbo
         int mode;
@@ -69,7 +91,7 @@ public final class IrCodes {
             default: mode = 3; // cool
         }
         b[6] = mode;
-        if (s.turbo) b[6] |= 1 << 5;
+        if (s.turbo && !turboCustom) b[6] |= 1 << 5;
 
         // Byte 7: temperature, stored as 31 - °C
         int t = Math.max(16, Math.min(31, s.temp));
@@ -77,8 +99,8 @@ public final class IrCodes {
 
         // Byte 8: fan, vertical swing, timer indicator
         int fan;
-        if (s.turbo || s.mode == AcState.MODE_FAN && s.fan == AcState.FAN_AUTO) fan = 5;
-        else if (s.sleep) fan = 1; // "night" speed
+        if ((s.turbo && !turboCustom) || s.mode == AcState.MODE_FAN && s.fan == AcState.FAN_AUTO) fan = 5;
+        else if (s.sleep && !sleepCustom) fan = 1; // "night" speed
         else {
             switch (s.fan) {
                 case AcState.FAN_LOW: fan = 2; break;
@@ -94,6 +116,13 @@ public final class IrCodes {
         b[11] = 0;
         b[12] = (s.swingH ? 1 << 3 : 0) | (isTcl ? 1 << 7 : 0);
 
+        // Bits found with the Button Finder: "active" = the opposite of the normal value.
+        if (ledCustom && !s.light) flip(b, s.ledBit);
+        if (turboCustom && s.turbo) flip(b, s.turboBit);
+        if (sleepCustom && s.sleep) flip(b, s.sleepBit);
+        if (s.cleanBit >= 0 && cleanPulse) flip(b, s.cleanBit);
+        if (flipBit >= 0) flip(b, flipBit);
+
         int sum = 0;
         for (int i = 0; i < 13; i++) sum += b[i];
         b[13] = sum & 0xFF;
@@ -103,11 +132,12 @@ public final class IrCodes {
         return out;
     }
 
-    private static Result tcl(AcState s, Cmd cmd, boolean isTcl) {
-        if (cmd == Cmd.CLEAN) {
-            return new Result(null, "Auto Clean has no known code for this AC type. Try Type B if your AC ignores other buttons.", false);
-        }
-        byte[] bytes = tclBytes(s, isTcl, cmd == Cmd.TIMER);
+    private static void flip(int[] b, int pos) {
+        int idx = pos / 8, bit = pos % 8;
+        if (idx >= 3 && idx <= 12) b[idx] ^= 1 << bit; // never touch the header bytes or checksum
+    }
+
+    static int[] tclPattern(byte[] bytes) {
         List<Integer> p = new ArrayList<>();
         p.add(TCL_HDR_MARK);
         p.add(TCL_HDR_SPACE);
@@ -118,7 +148,20 @@ public final class IrCodes {
             }
         }
         p.add(TCL_BIT_MARK);                               // footer
-        return new Result(toArray(p), null, false);
+        return toArray(p);
+    }
+
+    /** Button Finder: current state with one candidate bit inverted. */
+    static int[] finderPattern(AcState s, int flipBit) {
+        return tclPattern(tclBytes(s, s.type != 2, false, false, flipBit));
+    }
+
+    private static Result tcl(AcState s, Cmd cmd, boolean isTcl) {
+        if (cmd == Cmd.CLEAN && s.cleanBit < 0) {
+            return new Result(null, "Auto Clean isn't set up yet. Open the Button Finder to find it.", false);
+        }
+        byte[] bytes = tclBytes(s, isTcl, cmd == Cmd.TIMER, cmd == Cmd.CLEAN, -1);
+        return new Result(tclPattern(bytes), null, false);
     }
 
     // ---------------------------------------------------------------- Coolix

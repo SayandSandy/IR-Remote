@@ -28,6 +28,9 @@ public final class AcState {
     public long timerSetAt = 0;       // wall-clock millis when timer was sent
     public int clockOffsetMins = 0;   // user adjustment on top of phone time
 
+    /** Signal bits found with the Button Finder (byte*8 + bit), -1 = use the standard one. */
+    public int ledBit = -1, turboBit = -1, sleepBit = -1, cleanBit = -1;
+
     public void load(SharedPreferences p) {
         type = p.getInt("type", type);
         power = p.getBoolean("power", power);
@@ -42,6 +45,10 @@ public final class AcState {
         timerMins = p.getInt("timerMins", timerMins);
         timerSetAt = p.getLong("timerSetAt", timerSetAt);
         clockOffsetMins = p.getInt("clockOffset", clockOffsetMins);
+        ledBit = p.getInt("ledBit", ledBit);
+        turboBit = p.getInt("turboBit", turboBit);
+        sleepBit = p.getInt("sleepBit", sleepBit);
+        cleanBit = p.getInt("cleanBit", cleanBit);
         clamp();
     }
 
@@ -60,6 +67,10 @@ public final class AcState {
                 .putInt("timerMins", timerMins)
                 .putLong("timerSetAt", timerSetAt)
                 .putInt("clockOffset", clockOffsetMins)
+                .putInt("ledBit", ledBit)
+                .putInt("turboBit", turboBit)
+                .putInt("sleepBit", sleepBit)
+                .putInt("cleanBit", cleanBit)
                 .apply();
     }
 
