@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple remote-control glyph: rounded body, green power dot, IR wave -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M44,34h20a6,6 0,0 1,6 6v34a6,6 0,0 1,-6 6h-20a6,6 0,0 1,-6 -6v-34a6,6 0,0 1,6 -6z" />
+    <path android:fillColor="#34C759"
+        android:pathData="M54,50m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path android:fillColor="#C7C7CC"
+        android:pathData="M45,62h7v4h-7z M56,62h7v4h-7z M45,70h7v4h-7z M56,70h7v4h-7z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="3" android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M46,28 Q54,22 62,28 M42,23 Q54,14 66,23" />
+</vector>
