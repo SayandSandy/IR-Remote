@@ -97,7 +97,8 @@ public class MainActivity extends Activity {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(dp(16), dp(12), dp(16), dp(28));
-        scroll.addView(col);
+        scroll.addView(col, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // ---- Title
         TextView title = Ui.text(this, "AC Remote", 34, pal.label, false);
@@ -126,17 +127,20 @@ public class MainActivity extends Activity {
             showMessage("Switched to " + new String[]{"Type A", "Type B", "Type C"}[idx]
                     + ". Press Power to test it.");
         });
-        col.addView(seg, lp(-1, -2, 0, 0, 0, dp(6)));
+        LinearLayout.LayoutParams segLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(38));
+        segLp.bottomMargin = dp(6);
+        col.addView(seg, segLp);
         TextView segHint = Ui.text(this, "If your AC doesn't beep, try the next type.", 13, pal.secondary, false);
         segHint.setGravity(Gravity.CENTER);
-        col.addView(segHint, lp(-1, -2, 0, dp(2), 0, dp(16)));
+        col.addView(segHint, lp(-1, -2, 0, dp(2), 0, dp(12)));
 
         // ---- LCD card
         col.addView(buildLcd(), lp(-1, -2, 0, 0, 0, dp(10)));
 
         messageText = Ui.text(this, "", 13, pal.secondary, false);
         messageText.setGravity(Gravity.CENTER);
-        messageText.setMinHeight(dp(36));
+        messageText.setMinHeight(dp(30));
         messageText.setLineSpacing(0, 1.15f);
         messageText.setAlpha(0f);
         col.addView(messageText, lp(-1, -2, dp(8), 0, dp(8), dp(6)));
@@ -193,7 +197,8 @@ public class MainActivity extends Activity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         lcdContent = c;
-        card.addView(c);
+        card.addView(c, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -209,7 +214,7 @@ public class MainActivity extends Activity {
 
         LinearLayout tempRow = new LinearLayout(this);
         tempRow.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.TOP);
-        tempText = Ui.text(this, "24", 88, pal.label, false);
+        tempText = Ui.text(this, "24", 76, pal.label, false);
         tempText.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
         tempText.setLetterSpacing(-0.03f);
         tempRow.addView(tempText);
@@ -260,12 +265,12 @@ public class MainActivity extends Activity {
     private LinearLayout row(View... keys) {
         LinearLayout r = new LinearLayout(this);
         for (int i = 0; i < keys.length; i++) {
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(54), 1);
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(50), 1);
             if (i > 0) p.leftMargin = dp(10);
             r.addView(keys[i], p);
         }
         LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
-        rp.bottomMargin = dp(10);
+        rp.bottomMargin = dp(8);
         r.setLayoutParams(rp);
         return r;
     }

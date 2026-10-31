@@ -177,7 +177,7 @@ final class Ui {
             label.setAllCaps(false);
             addView(label, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT));
-            setMinimumHeight(dp(c, 54));
+            setMinimumHeight(dp(c, 50));
             setActive(false);
             setContentDescription(text);
         }
@@ -257,14 +257,13 @@ final class Ui {
             for (int i = 0; i < items.length; i++) {
                 TextView t = text(c, items[i], 14, pal.label, true);
                 t.setGravity(android.view.Gravity.CENTER);
-                t.setPadding(0, dp(c, 8), 0, dp(c, 8));
                 final int idx = i;
                 t.setOnClickListener(v -> select(idx, true));
-                row.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+                row.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
             }
             row.setElevation(dp(c, 2));
             addView(row, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
+                    ViewGroup.LayoutParams.MATCH_PARENT));
         }
 
         void setListener(Listener l) { listener = l; }
